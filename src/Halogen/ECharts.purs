@@ -1,66 +1,96 @@
--- | This module defines an adapter between Halogen's widget API and
--- | the `purescript-echarts` library.
+module Halogen.ECharts where
 
-module Halogen.ECharts (ECEffects(), chart) where
+import Prelude
+import Control.Monad.Aff (Aff())
+import Data.Maybe (Maybe(..))
+import DOM (DOM())
+import DOM.HTML.Types (HTMLElement())
+import ECharts.Chart as Ec
+import ECharts.Options as Ec
+import ECharts.Effects ( ECHARTS_INIT()
+                       , ECHARTS_OPTION_SET()
+                       , ECHARTS_DISPOSE()
+                       , ECHARTS_RESIZE()
+                       , ECHARTS_REFRESH()
+                       , ECHARTS_CLEAR()
+                       )
 
-import DOM
+import Halogen
+import qualified Halogen.HTML as H
+import qualified Halogen.HTML.Properties as P
 
-import Data.Int
-import Data.Maybe
+type EChartsState =
+  { option :: Maybe Ec.Option
+  , chart :: Maybe Ec.EChart
+  }
 
-import Data.DOM.Simple.Types
-import Data.DOM.Simple.Element
-import Data.DOM.Simple.Window
-import Data.DOM.Simple.Document
+initialEChartsState :: EChartsState
+initialEChartsState =
+  { option: Nothing
+  , chart: Nothing
+  }
 
-import Control.Monad (when)
-import Control.Monad.Eff
+data EChartsQuery a
+  = Set Ec.Option a
+  | Resize a
+  | Refresh a
+  | Clear a
+  | Dispose a
+  | Init HTMLElement a
+  | Quit HTMLElement a
 
-import qualified ECharts.Chart as EC
-import qualified ECharts.Options as EC
-import qualified ECharts.Effects as EC
+type EChartsEffects e = ( echartInit :: ECHARTS_INIT
+                        , echartSetOption :: ECHARTS_OPTION_SET
+                        , echartDispose :: ECHARTS_DISPOSE
+                        , echartResize :: ECHARTS_RESIZE
+                        , echartRefresh :: ECHARTS_REFRESH
+                        , echartClear :: ECHARTS_CLEAR
+                        , dom :: DOM
+                        | e)
 
-import Halogen.HTML.Widget
-import Halogen.Internal.VirtualDOM (Widget())
+echarts :: forall e. Component EChartsState EChartsQuery (Aff (EChartsEffects e))
+echarts = component render eval
 
-type ECEffects eff = ( echartInit :: EC.EChartInit
-                     , echartSetOption :: EC.EChartOptionSet
-                     , echartDispose :: EC.EChartDispose
-                     , dom :: DOM 
-                     | eff)
+render :: EChartsState -> ComponentHTML EChartsQuery
+render _ = H.div [ P.initializer \el -> action (Init el)
+                 , P.finalizer \el -> action (Quit el)] [ ]
 
--- | Create a component which responds to inputs of type `Option` by updating a
--- | chart component with those options.
--- |
--- | The first argument should be a unique identifier for this component.
--- |
--- | The second argument is a version number which can be used to detect when the 
--- | `update` function should be called.
-chart :: forall eff res. String -> Int -> EC.Option -> Widget (ECEffects eff) res
-chart id version opts = widget spec
-  where
-  spec = { value: version
-         , name: "echarts"
-         , id: id 
-         , init: const init
-         , update: update
-         , destroy: destroy
-         }
-
-  init :: Eff (ECEffects eff) { context :: EC.EChart, node :: HTMLElement }
-  init = do
-    w <- document globalWindow
-    Just node <- getElementById id w
-    ec <- EC.init Nothing node
-    EC.setOption opts false ec
-    return { context: ec, node: node }
-
-  update :: Int -> Int -> EC.EChart -> HTMLElement -> Eff (ECEffects eff) (Maybe HTMLElement)
-  update _ prevVersion ec _ = do
-    when (version > prevVersion) $ 
-      void $ EC.setOption opts false ec
-    return Nothing
-
-  destroy :: EC.EChart -> HTMLElement -> Eff (ECEffects eff) Unit
-  destroy ec _ = EC.dispose ec
-  
+eval :: forall e. Eval EChartsQuery EChartsState EChartsQuery (Aff (EChartsEffects e))
+eval (Set opts next) = do
+  state <- get
+  case state.chart of
+    Nothing -> pure unit
+    Just chart -> do
+      chart' <- liftEff' $ Ec.setOption opts true chart
+      modify (const $ {chart: pure chart', option: pure opts})
+  pure next
+eval (Resize next) = do
+  state <- get
+  case state.chart of
+    Nothing -> pure unit
+    Just chart -> liftEff' $ Ec.resize chart
+  pure next
+eval (Refresh next) = do
+  state <- get
+  case state.chart of
+    Nothing -> pure unit
+    Just chart -> liftEff' $ Ec.refresh chart
+  pure next
+eval (Clear next) = do
+  state <- get
+  case state.chart of
+    Nothing -> pure unit
+    Just chart -> liftEff' $ Ec.clear chart
+  pure next
+eval (Dispose next) = do
+  state <- get
+  case state.chart of
+    Nothing -> pure unit
+    Just chart -> liftEff' $ Ec.dispose chart
+  pure next
+eval (Init el next) = do
+  chart <- liftEff' $ Ec.init Nothing el
+  modify (_{chart = pure chart})
+  pure next
+eval (Quit el next) = do
+  pure next

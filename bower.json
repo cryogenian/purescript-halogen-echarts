@@ -1,6 +1,5 @@
 {
   "name": "purescript-halogen-echarts",
-  "version": "1.0.0",
   "moduleType": [
     "node"
   ],
@@ -11,7 +10,7 @@
     "output"
   ],
   "dependencies": {
-    "purescript-halogen": "master",
-    "purescript-echarts": "*"
+    "purescript-halogen": "^0.5.2",
+    "purescript-echarts": "^0.4.0"
   }
 }
